@@ -11,10 +11,12 @@ class region_grid {
 public:
 	region_grid():
 		region_list(new region<T>[REGION_ROWS*REGION_COLS]())
-	{}
+	{
+		setup_land();
+	}
 
-	static const int REGION_ROWS = 40;
-	static const int REGION_COLS = 80;
+	static const int REGION_ROWS = 20;
+	static const int REGION_COLS = 40;
 	
 	constexpr static const T total_regions() {
 		return REGION_ROWS * REGION_COLS;
@@ -68,6 +70,39 @@ public:
 
 private:
 	region<T>* region_list;
+
+	void setup_land() {
+		for(int i=REGION_ROWS*1/4; i<=REGION_ROWS*3/4; ++i) {
+			for(int j=REGION_COLS*1/5; j<REGION_COLS*2/5; ++j) {
+				int region_index = index(i, j);
+				region_list[region_index].type = region<T>::LAND;
+				if(i == REGION_ROWS*3/4) {
+					region_list[region_index].type = region<T>::SWAMP;
+				}
+			}
+		}
+		for(int i=REGION_ROWS*1/8; i<REGION_ROWS*2/8; ++i) {
+			for(int j=REGION_COLS*4/7; j<REGION_COLS*5/7; ++j) {
+				int region_index = index(i, j);
+				region_list[region_index].type = region<T>::LAND;
+			}
+		}
+		for(int i=REGION_ROWS*3/8; i<REGION_ROWS*4/8; ++i) {
+			for(int j=REGION_COLS*5/7; j<=REGION_COLS*6/7; ++j) {
+				int region_index = index(i, j);
+				region_list[region_index].type = region<T>::LAND;
+				if(j == REGION_COLS*6/7) {
+					region_list[region_index].type = region<T>::SWAMP;
+				}
+			}
+		}
+		for(int i=REGION_ROWS*5/8; i<REGION_ROWS*6/8; ++i) {
+			for(int j=REGION_COLS*4/7; j<REGION_COLS*5/7; ++j) {
+				int region_index = index(i, j);
+				region_list[region_index].type = region<T>::SWAMP;
+			}
+		}
+	}
 
 	int index(int row, int col) const {
 		return (row * REGION_COLS) + col;

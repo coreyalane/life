@@ -9,7 +9,7 @@ template<typename T>
 class rng {
 public:
         static const int RAND_LIST_LENGTH = 200000;
-	static const int RAND_CYCLE_LENGTH = 1;
+	static const int RAND_CYCLE_LENGTH = 10;
 
 	static T* rand_list;
 	static int rand_index;
@@ -17,7 +17,7 @@ public:
 
 	static void init() {
 		rand_list = new T[RAND_LIST_LENGTH]();
-		reseed(4732985);
+		reseed(4732383);
 	}
 
 	static void reseed(int seed) {

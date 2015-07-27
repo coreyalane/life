@@ -21,6 +21,7 @@
 #include "util.h"
 
 using std::abs;
+using std::cin;
 using std::cout;
 using std::endl;
 using std::list;
@@ -95,6 +96,14 @@ public:
 				return false;
 			}),
 			environments.end());
+		if(draw_regions_enabled) {
+			draw_regions();
+		}
+		if(draw_environments_enabled) {
+			for(const auto& env : environments) {
+				draw(env);
+			}
+		}
 		for(int i=0; i<MAX_ENTITIES; ++i) {
 			entity<T>& ent = entities[i];
 			if(ent.active) {
@@ -104,15 +113,7 @@ public:
 				draw(ent);
 			}
 		}
-		if(draw_environments_enabled) {
-			for(const auto& env : environments) {
-				draw(env);
-			}
-		}
-		if(draw_regions_enabled) {
-			draw_regions();
-		}
-		cout << (clock() - now)/1000.0 << "  " << entity_count << endl;
+		//cout << (clock() - now)/1000.0 << "  " << entity_count << endl;
 		T avg_power = 0.0;
 		int power_count = 0;
 		for(int i=0; i<MAX_ENTITIES; ++i) {
@@ -185,6 +186,7 @@ public:
 		const T& region_heat_level = current_region.heat_level;
 		const T& region_power = current_region.power;
 		const T& average_region_power = region_power / region_count;
+		const T& region_aqua_terra = current_region.aqua_terra();
 
 		//overpopulation
 		static const T upper_population_limit = average_count_per_region * 3.0;
@@ -197,6 +199,11 @@ public:
 		T prob_overheating = min(abs(scaled_heat_tolerance - region_heat_level), 1.0);
 		prob_to_live *= (1.0 - prob_overheating);
  		//cout << "prob overheat: " << prob_overheating << endl; 
+
+		//aqua_terra
+		T prob_suffocate = abs(region_aqua_terra - entity_to_die.aqua_terra);
+		prob_to_live *= (1.0 - prob_suffocate);
+		//cout << prob_suffocate << endl;
 
 		//starving
 		T relative_power = entity_to_die.power / average_region_power; // [0, inf]
@@ -265,7 +272,7 @@ public:
 		else {
 			b = 1.0;
 		}
-		draw(env_to_draw.location, r, 0.0, b, .03 * env_to_draw.magnitude, .06 * env_to_draw.magnitude);	
+		draw_outline(env_to_draw.location, r, 0.0, b, .03 * env_to_draw.magnitude, .06 * env_to_draw.magnitude);	
 	}
 
 	void draw_regions() {
@@ -274,19 +281,20 @@ public:
 		for(int i = 0; i<regions.total_regions(); ++i) {
 			int row = i / regions.REGION_COLS;
 			int col = i % regions.REGION_COLS;
-			T y = (row_step * (row + 0.5)) - 1;
-			T x = (col_step * (col + 0.5)) - 1;
-			T heat_level = regions.get_region(i).heat_level;
+			T y = (row_step * ((T)row + 0.5)) - 1;
+			T x = (col_step * ((T)col + 0.5)) - 1;
+			region<T>& region = regions.get_region(i);
 			T r = 0.0;
+			T g = 0.0;
 			T b = 0.0;
-			if(heat_level > 0) {
-				r = min(heat_level, 1.0);
+			if(false) {
+				region.heat_color(r, g, b);
+			} else {
+				region.type_color(r, g, b);
 			}
-			else {
-				b = max(-heat_level, 0.0);
-			}
-			draw(point<T>(x, y), r, 0.0, b, row_step, col_step);
+			draw(point<T>(x, y), r, g, b, col_step/2, row_step/2);
 		}
+		//cin >> row_step;
 	}
 
 	inline static void draw(const point<T>& location, T r, T g, T b, T x_offset, T y_offset) {
@@ -300,6 +308,20 @@ public:
 		glVertex2f(x + x_offset, y - y_offset);
 		glEnd();
 	}
+
+	inline static void draw_outline(const point<T>& location, T r, T g, T b, T x_offset, T y_offset) {
+		const T& x = location.x;
+		const T& y = location.y;
+		glBegin(GL_LINE_STRIP);
+		glColor3f(r, g, b);
+		glVertex2f(x - x_offset, y - y_offset);
+		glVertex2f(x - x_offset, y + y_offset);
+		glVertex2f(x + x_offset, y + y_offset);
+		glVertex2f(x + x_offset, y - y_offset);
+		glVertex2f(x - x_offset, y - y_offset);
+		glEnd();
+	}
+
 
 private:
 };
