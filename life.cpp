@@ -45,11 +45,11 @@ public:
 	static int rand_cycle;
 
 	static void init() {
-		init(4732985);
+		rand_list = new T[RAND_LIST_LENGTH]();
+		reseed(4732985);
 	}
 
-	static void init(int seed) {
-		rand_list = new T[RAND_LIST_LENGTH]();
+	static void reseed(int seed) {
 		rand_index = 0;
 		rand_cycle = 0;
 		//try { random_device dev; seed = dev(); } catch (void* e){}
@@ -67,7 +67,7 @@ public:
 			rand_index = 0;
 			++rand_cycle;
 			if(rand_cycle > RAND_CYCLE_LENGTH) {
-				init(static_cast<int>(rand_list[0]));
+				reseed(static_cast<int>(rand_list[0]));
 				rand_cycle = 0;
 			}
 		}
