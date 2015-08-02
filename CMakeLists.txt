@@ -23,14 +23,27 @@ if(NOT OPENGL_FOUND)
     message(ERROR " OPENGL not found!")
 endif(NOT OPENGL_FOUND)
 #########################################################
-# Include Files
+# FIND CUDA 
 #########################################################
-add_executable(life life.cpp)
-
+find_package(CUDA REQUIRED)
+include_directories(${CUDA_INCLUDE_DIRS})
+link_directories(${CUDA_LIBRARY_DIRS})
+add_definitions(${CUDA_DEFINITIONS})
+if(NOT CUDA_FOUND)
+    message(ERROR " CUDA not found!")
+endif(NOT CUDA_FOUND)
 ########################################################
 # Linking & stuff
 #########################################################
 SET(CMAKE_CXX_FLAGS "-std=c++11 -Ofast")
+SET(CUDA_NVCC_FLAGS "-std=c++11 -O0")
+
+#########################################################
+# Include Files
+#########################################################
+cuda_add_executable(life life.cu)
+cuda_add_executable(mycuda mycuda.cu)
 
 # create the program "test"
-target_link_libraries(life ${OPENGL_LIBRARIES} ${GLUT_LIBRARY})
+target_link_libraries(life ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} ${CUDA_LIBRARIES})
+target_link_libraries(mycuda ${CUDA_LIBRARIES})

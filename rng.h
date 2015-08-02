@@ -17,6 +17,7 @@ public:
 
 	static void init() {
 		rand_list = new T[RAND_LIST_LENGTH]();
+		//cudaMallocManaged((void**)rand_list, sizeof(T) * RAND_LIST_LENGTH);
 		reseed(4732383);
 	}
 

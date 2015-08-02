@@ -9,6 +9,7 @@
 #include <time.h>
 #include <vector>
 
+#include <cuda.h>
 #include <GL/glut.h>
 
 #include "entity.h"
@@ -29,12 +30,26 @@ using std::max;
 using std::min;
 using std::queue;
 
+const int BLOCK_SIZE = 128;
+
+template<typename T>
+__global__ void update_kernel(entity<T>* entities, region<T>* regions, const int max_entities, const T total_regions) {
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if(idx < max_entities) {
+		entity<T>& ent = entities[idx];
+		if(ent.active) {
+			region<T>& current_region = regions[ent.region_index];
+			ent.die(current_region, total_regions, max_entities);
+		}
+	}
+}
+
 template<typename T>
 class game_state {
 public:
 	game_state():
 		gen_count(0),
-		entities(new entity<T>[MAX_ENTITIES]()),
+		entities(),
 	 	environments(),
 		next_environment_time(0),	
 		regions(),
@@ -44,7 +59,14 @@ public:
 		draw_environments_enabled(false),
 		draw_heat_tolerance_enabled(false),
 		key_presses()
-	{}
+	{
+		//entities = new entity<T>[MAX_ENTITIES]();
+		cudaMallocManaged((void**)&entities, sizeof(entity<T>) * MAX_ENTITIES);
+		cudaDeviceSynchronize();
+		for(int i = 0; i<MAX_ENTITIES; ++i) {
+			entities[i] = entity<T>();
+		}
+	}
 
 	static const long MIN_ENVIRONMENT_LIFESPAN = 100;
 	static const long MAX_ENVIRONMENT_LIFESPAN = 1000;
@@ -104,16 +126,47 @@ public:
 				draw(env);
 			}
 		}
+		//pre cuda loop
 		for(int i=0; i<MAX_ENTITIES; ++i) {
 			entity<T>& ent = entities[i];
 			if(ent.active) {
 				procreate(ent);
 				move(ent);
-				die(ent);
+			}
+		}
+		cout << "pre cuda loop: " << clock() - now << endl;
+		//cuda loop
+		T total_regions = region_grid<T>::total_regions();
+		if(false) {
+			for(int i=0; i<MAX_ENTITIES; ++i) {
+				entity<T>& ent = entities[i];
+				if(ent.active) {
+					region<T>& current_region = regions.get_region(ent);
+					ent.die(current_region, total_regions, MAX_ENTITIES);
+				}
+			}
+		} else {
+			//int block_size = 128;
+			const int n_blocks = MAX_ENTITIES/BLOCK_SIZE + (MAX_ENTITIES%BLOCK_SIZE == 0 ? 0:1);
+			update_kernel <<< n_blocks, BLOCK_SIZE >>> (entities, regions.region_list, MAX_ENTITIES, total_regions);
+			cudaDeviceSynchronize();
+		}
+		//post cuda loop
+	        cout << "cuda loop: " << clock() - now << " " << entities[0].active << endl;	
+		for(int i=0; i<MAX_ENTITIES; ++i) {
+			entity<T>& ent = entities[i];
+			if(ent.active) {
+				if(!rng<T>::prob(ent.prob_to_live)) {
+					ent.active = false;
+					entity_count--;
+					regions.remove_entity(ent);
+				}
 				draw(ent);
 			}
 		}
-		//cout << (clock() - now)/1000.0 << "  " << entity_count << endl;
+		
+		cout << (clock() - now)/1000.0 << "  " << entity_count << endl;
+		/**
 		T avg_power = 0.0;
 		int power_count = 0;
 		for(int i=0; i<MAX_ENTITIES; ++i) {
@@ -122,7 +175,9 @@ public:
 				++power_count;
 			}
 		}
+		**/
 		++gen_count;
+		cout << "post cuda loop: " << clock() - now << endl;
 		//cout << avg_power / (T)power_count << endl;
 		//cout << entities[0].location.x << " : " << entities[0].location.y << endl;
 	}
@@ -168,61 +223,9 @@ public:
 	}
 
 	void procreate(entity<T>& entity_to_procreate) {
-		T fertility = entity_to_procreate.fertility - ((T)entity_count/MAX_ENTITIES);
+		T fertility = entity_to_procreate.fertility - pow(((T)entity_count/MAX_ENTITIES), 2.0);
 		if(rng<T>::prob(fertility)) {
 			copy_entity(entity_to_procreate);
-		}
-	}
-
-	void die(entity<T>& entity_to_die) {
-		T prob_to_live = 1.0;
-		//cout << "base prob to live: " << prob_to_live << endl;
-
-		//region
-		region<T>& current_region = regions.get_region(entity_to_die);
-		const T region_count = static_cast<T>(current_region.count);
-		static const T total_regions = region_grid<T>::total_regions();
-		static const T average_count_per_region = static_cast<T>(MAX_ENTITIES) / total_regions;
-		const T& region_heat_level = current_region.heat_level;
-		const T& region_power = current_region.power;
-		const T& average_region_power = region_power / region_count;
-		const T& region_aqua_terra = current_region.aqua_terra();
-
-		//overpopulation
-		static const T upper_population_limit = average_count_per_region * 3.0;
-		T prob_overcrowding = min(region_count / upper_population_limit, 1.0) * (1 - entity_to_die.power);  
-		prob_to_live *= (1.0 - prob_overcrowding);
-		//cout << "prob overcrowd: " << prob_overcrowding << endl;
-
-		//heat
-		T scaled_heat_tolerance = (entity_to_die.heat_tolerance - 0.5) * 1.0;
-		T prob_overheating = min(abs(scaled_heat_tolerance - region_heat_level), 1.0);
-		prob_to_live *= (1.0 - prob_overheating);
- 		//cout << "prob overheat: " << prob_overheating << endl; 
-
-		//aqua_terra
-		T prob_suffocate = abs(region_aqua_terra - entity_to_die.aqua_terra);
-		prob_to_live *= (1.0 - prob_suffocate);
-		//cout << prob_suffocate << endl;
-
-		//starving
-		T relative_power = entity_to_die.power / average_region_power; // [0, inf]
-		T capped_relative_power = min(relative_power, 1.0); // [0, 1]
-		T prob_starving = capped_relative_power * entity_to_die.power / 2.0;
-		prob_to_live *= (1.0 - prob_starving); 
-		//cout << "prob starve: " << prob_starving << endl;
-
-		//edge
-		prob_to_live *= 1 - pow(entity_to_die.location.x, 10.0);
-		prob_to_live *= 1 - pow(entity_to_die.location.y, 10.0);
-
-		//cout << "final prob to live: " << prob_to_live << endl;
-
-		//calc death
-		if(!rng<T>::prob(prob_to_live)) {
-			entity_to_die.active = false;
-			entity_count--;
-			regions.remove_entity(entity_to_die);
 		}
 	}
 

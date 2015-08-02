@@ -2,6 +2,9 @@
 
 #include <vector>
 
+#include <cuda.h>
+
+#include "entity.h"
 #include "region.h"
 
 using std::vector;
@@ -10,8 +13,15 @@ template<typename T>
 class region_grid {
 public:
 	region_grid():
-		region_list(new region<T>[REGION_ROWS*REGION_COLS]())
+		region_list()
 	{
+		//region_list = new region<T>[REGION_ROWS*REGION_COLS]();
+		const int n_regions = REGION_ROWS*REGION_COLS;
+		cudaMallocManaged((void**)&region_list, sizeof(region<T>) * n_regions);
+		cudaDeviceSynchronize();
+		for(int i=0; i<n_regions; ++i) {
+			region_list[i] = region<T>();
+		}
 		setup_land();
 	}
 
@@ -68,9 +78,9 @@ public:
 		}
 	}
 
-private:
 	region<T>* region_list;
 
+private:
 	void setup_land() {
 		for(int i=REGION_ROWS*1/4; i<=REGION_ROWS*3/4; ++i) {
 			for(int j=REGION_COLS*1/5; j<REGION_COLS*2/5; ++j) {

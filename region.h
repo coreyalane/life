@@ -21,7 +21,7 @@ public:
 	T heat_level;
 	T power;
 
-	T aqua_terra() const {
+	__device__ __host__ T aqua_terra() const {
 		switch(type) {
 			case LAND:
 				return 0.95;
@@ -30,6 +30,7 @@ public:
 			case WATER:
 				return 0.05;
 		}
+		return 0.05;
 	}
 
 	void heat_color(T& r, T& g, T& b) const {
